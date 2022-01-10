@@ -38,6 +38,8 @@
 #ifndef REALTIME_TOOLS__REALTIME_PUBLISHER_H_
 #define REALTIME_TOOLS__REALTIME_PUBLISHER_H_
 
+#define NON_POLLING
+
 #include <string>
 #include <ros/node_handle.h>
 #include <boost/utility.hpp>
@@ -200,21 +202,30 @@ private:
       Msg outgoing;
 
       // Locks msg_ and copies it
+    #ifdef NON_POLLING
+      {
+      std::unique_lock<std::mutex> lck(msg_mutex_);
+    #else
       lock();
+    #endif
       while (turn_ != NON_REALTIME && keep_running_)
       {
-#ifdef NON_POLLING
-	updated_cond_.wait(lock);
-#else
-	unlock();
-	usleep(500);
-	lock();
-#endif
+      #ifdef NON_POLLING
+        updated_cond_.wait(lck);
+      #else
+        unlock();
+        usleep(500);
+        lock();
+      #endif
       }
       outgoing = msg_;
       turn_ = REALTIME;
 
+    #ifdef NON_POLLING
+      }
+    #else
       unlock();
+    #endif
 
       // Sends the outgoing message
       if (keep_running_)
