@@ -44,6 +44,8 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/condition.hpp>
+#include <pthread.h>
+#include <sched.h>
 
 namespace realtime_tools {
 
@@ -54,7 +56,7 @@ class RealtimePublisher : boost::noncopyable
 public:
   /// The msg_ variable contains the data that will get published on the ROS topic.
   Msg msg_;
-  
+
   /**  \brief Constructor for the realtime publisher
    *
    * \param node the nodehandle that specifies the namespace (or prefix) that is used to advertise the ROS topic
@@ -62,10 +64,10 @@ public:
    * \param queue_size the size of the outgoing ROS buffer
    * \param latched . optional argument (defaults to false) to specify is publisher is latched or not
    */
-  RealtimePublisher(const ros::NodeHandle &node, const std::string &topic, int queue_size, bool latched=false)
+  RealtimePublisher(const ros::NodeHandle &node, const std::string &topic, int queue_size, bool latched=false, bool raise_priority=false)
     : topic_(topic), node_(node), is_running_(false), keep_running_(false), turn_(REALTIME)
   {
-    construct(queue_size, latched);
+    construct(queue_size, latched, raise_priority);
   }
 
   RealtimePublisher()
@@ -83,11 +85,12 @@ public:
     publisher_.shutdown();
   }
 
-  void init(const ros::NodeHandle &node, const std::string &topic, int queue_size, bool latched=false)
+
+  void init(const ros::NodeHandle &node, const std::string &topic, int queue_size, bool latched=false, bool raise_priority=false)
   {
     topic_ = topic;
     node_ = node;
-    construct(queue_size, latched);
+    construct(queue_size, latched, raise_priority);
   }
 
   /// Stop the realtime publisher from sending out more ROS messages
@@ -166,11 +169,21 @@ public:
   }
 
 private:
-  void construct(int queue_size, bool latched=false)
+  void construct(int queue_size, bool latched=false, bool raise_priority=false)
   {
     publisher_ = node_.advertise<Msg>(topic_, queue_size, latched);
     keep_running_ = true;
     thread_ = boost::thread(&RealtimePublisher::publishingLoop, this);
+
+    // Set to realtime scheduler for this thread if required
+    if (raise_priority)
+    {
+      struct sched_param thread_param;
+      int policy = SCHED_FIFO;
+      thread_param.sched_priority = sched_get_priority_max(policy) - 10;
+      pthread_setschedparam((pthread_t) thread_.native_handle(),
+                            policy, &thread_param);
+    }
   }
 
 
@@ -180,6 +193,7 @@ private:
   {
     is_running_ = true;
     turn_ = REALTIME;
+
 
     while (keep_running_)
     {
@@ -208,6 +222,7 @@ private:
     }
     is_running_ = false;
   }
+
 
   std::string topic_;
   ros::NodeHandle node_;
