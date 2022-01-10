@@ -40,11 +40,13 @@
 
 #define NON_POLLING
 
-#include <string>
+
+
 #include <ros/node_handle.h>
 #include <boost/utility.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
+
 #include <boost/thread/condition.hpp>
 #include <pthread.h>
 #include <sched.h>
@@ -204,7 +206,7 @@ private:
       // Locks msg_ and copies it
     #ifdef NON_POLLING
       {
-      std::unique_lock<std::mutex> lck(msg_mutex_);
+        boost::unique_lock<boost::mutex> lck(msg_mutex_);
     #else
       lock();
     #endif
